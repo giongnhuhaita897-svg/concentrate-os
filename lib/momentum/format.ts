@@ -1,5 +1,9 @@
 import type { FocusSession, Task } from './types'
 
+export function normalizeSearch(value: string) {
+  return value.trim().toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')
+}
+
 export function dateOffset(date: string, days: number) {
   return new Date(new Date(`${date}T12:00:00Z`).getTime() + days * 86400000).toISOString().slice(0, 10)
 }

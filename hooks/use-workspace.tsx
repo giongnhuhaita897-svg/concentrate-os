@@ -20,6 +20,7 @@ export function useWorkspace() {
   const update = (fn: (current: Workspace) => Workspace) => mutate((current) => fn(current ?? initial), { revalidate: false })
   return {
     workspace,
+    hasChanges: workspace !== initial,
     addGoal: (goal: Omit<Goal, 'id' | 'archived'>) => update((current) => ({ ...current, goals: [...current.goals, { ...goal, id: crypto.randomUUID(), archived: false }] })),
     addTask: (task: Omit<Task, 'id' | 'completed'>) => update((current) => ({ ...current, tasks: [...current.tasks, { ...task, id: crypto.randomUUID(), completed: false }] })),
     toggleTask: (id: string) => update((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, completed: !task.completed } : task) })),

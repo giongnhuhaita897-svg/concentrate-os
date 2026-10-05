@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useInterface } from '@/hooks/use-interface'
 import { useWorkspace } from '@/hooks/use-workspace'
-import { useFocus } from '@/hooks/use-focus'
-import { dateOffset, goalProgress } from '@/lib/momentum/format'
+import { useFocusControls } from '@/hooks/use-focus'
+import { dateOffset, goalProgress, normalizeSearch } from '@/lib/momentum/format'
 import type { GoalColor } from '@/lib/momentum/types'
 import { TaskRow } from './task-row'
 import { EmptyState } from './ui-parts'
@@ -29,7 +29,7 @@ export function WorkspaceDialogs() {
 function DialogBody() {
   const actions = useInterface()
   const { workspace, addGoal, addTask, archiveGoal, setPreferences } = useWorkspace()
-  const focus = useFocus()
+  const focus = useFocusControls()
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
@@ -69,9 +69,9 @@ function DialogBody() {
   if (dialog.type === 'help') return <div className="help-content"><div className="help-symbol"><Target /></div><p>Focus OS là không gian để biến mục tiêu lớn thành những bước nhỏ, có chủ đích.</p><ol><li><strong>Đặt mục tiêu</strong><span>Xác định điều quan trọng với cậu.</span></li><li><strong>Lên kế hoạch</strong><span>Chia hành trình thành nhiệm vụ mỗi ngày.</span></li><li><strong>Tập trung và tiến bộ</strong><span>Dành 25 hoặc 50 phút cho một việc duy nhất.</span></li></ol><p className="demo-disclaimer"><Info />Đây là bản trải nghiệm với dữ liệu mẫu. Thay đổi chỉ tồn tại trong phiên hiện tại; tải lại trang sẽ đặt lại dữ liệu. Không có tài khoản hoặc kết nối máy chủ.</p><Button onClick={actions.close}>Bắt đầu khám phá<ArrowUpRight data-icon="inline-end" /></Button></div>
 
   if (dialog.type === 'search') {
-    const query = search.trim().toLocaleLowerCase('vi-VN')
-    const matchingGoals = goals.filter((goal) => goal.title.toLocaleLowerCase('vi-VN').includes(query))
-    const tasks = workspace.tasks.filter((task) => goals.some((goal) => goal.id === task.goalId) && task.title.toLocaleLowerCase('vi-VN').includes(query)).slice(0, 7)
+    const query = normalizeSearch(search)
+    const matchingGoals = goals.filter((goal) => normalizeSearch(goal.title).includes(query))
+    const tasks = workspace.tasks.filter((task) => goals.some((goal) => goal.id === task.goalId) && normalizeSearch(task.title).includes(query)).slice(0, 7)
     return <div className="search-content"><Field><FieldLabel htmlFor="workspace-search" className="sr-only">Tìm kiếm</FieldLabel><Input id="workspace-search" autoFocus placeholder="Tên mục tiêu, nhiệm vụ..." value={search} onChange={(event) => setSearch(event.target.value)} /></Field><div className="search-results">{matchingGoals.map((goal) => <button key={goal.id} onClick={() => actions.viewGoal(goal.id)}><Target /><span>{goal.title}<small>Mục tiêu</small></span><ArrowUpRight /></button>)}{tasks.map((task) => <button key={task.id} onClick={() => { focus.selectTask(task.id); actions.close(); router.push('/focus') }}><Search /><span>{task.title}<small>Nhiệm vụ</small></span><ArrowUpRight /></button>)}{!matchingGoals.length && !tasks.length && <EmptyState title="Chưa tìm thấy kết quả" description="Thử tìm với một từ khóa ngắn hơn nhé." />}</div></div>
   }
 

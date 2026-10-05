@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { useWorkspace } from './use-workspace'
 
@@ -15,7 +15,9 @@ interface FocusValue {
   toggle: () => void
   reset: () => void
 }
+type FocusControls = Omit<FocusValue, 'remaining'>
 const FocusContext = createContext<FocusValue | null>(null)
+const FocusControlsContext = createContext<FocusControls | null>(null)
 
 export function FocusProvider({ children }: { children: ReactNode }) {
   const { addSession } = useWorkspace()
@@ -24,6 +26,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<FocusStatus>('idle')
   const [taskId, setTaskId] = useState<string>()
   const deadline = useRef(0)
+  const pausedSeconds = useRef(25 * 60)
   const session = useRef<{ id: string; startedAt: string } | null>(null)
   const saveSession = useRef(addSession)
   saveSession.current = addSession
@@ -45,31 +48,48 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       setRemaining(seconds)
       if (seconds === 0) complete()
     }
+    const onVisible = () => { if (!document.hidden) tick() }
     tick()
-    const interval = setInterval(tick, 250)
-    return () => clearInterval(interval)
+    const interval = setInterval(tick, 1000)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('pageshow', tick)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('pageshow', tick)
+    }
   }, [status, complete])
 
-  const toggle = () => {
+  const toggle = useCallback(() => {
     if (status === 'running') {
       const seconds = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000))
       if (!seconds) { complete(); return }
+      pausedSeconds.current = seconds
       setRemaining(seconds)
       setStatus('paused')
     } else {
-      const seconds = status === 'completed' ? duration * 60 : remaining
+      const seconds = status === 'paused' ? pausedSeconds.current : duration * 60
       if (status !== 'paused') session.current = { id: crypto.randomUUID(), startedAt: new Date().toISOString() }
       deadline.current = Date.now() + seconds * 1000
       setRemaining(seconds)
       setStatus('running')
     }
-  }
+  }, [status, duration, complete])
 
-  return <FocusContext.Provider value={{ duration, remaining, status, taskId, toggle,
+  const controls = useMemo<FocusControls>(() => ({ duration, status, taskId, toggle,
     setDuration: (minutes) => { if (status === 'running' || status === 'paused' || ![25, 50].includes(minutes)) return; setMinutes(minutes); setRemaining(minutes * 60); setStatus('idle') },
     selectTask: (id) => { if (status === 'running' || status === 'paused') { toast.info('Hãy hoàn thành hoặc đặt lại phiên hiện tại trước khi đổi nhiệm vụ.'); return }; setTaskId(id || undefined) },
     reset: () => { session.current = null; setRemaining(duration * 60); setStatus('idle') },
-  }}>{children}</FocusContext.Provider>
+  }), [duration, status, taskId, toggle])
+  const value = useMemo<FocusValue>(() => ({ ...controls, remaining }), [controls, remaining])
+
+  return <FocusControlsContext.Provider value={controls}><FocusContext.Provider value={value}>{children}</FocusContext.Provider></FocusControlsContext.Provider>
+}
+
+export function useFocusControls() {
+  const context = useContext(FocusControlsContext)
+  if (!context) throw new Error('FocusProvider is required')
+  return context
 }
 
 export function useFocus() {

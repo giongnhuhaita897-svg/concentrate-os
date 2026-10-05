@@ -4,13 +4,13 @@ import { Headphones, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Field, FieldLabel } from '@/components/ui/field'
-import { useFocus } from '@/hooks/use-focus'
+import { useFocusControls } from '@/hooks/use-focus'
 import { useWorkspace } from '@/hooks/use-workspace'
 import { QuickFocus } from './overview'
 import { PageHeading } from './ui-parts'
 
 export function FocusPage() {
-  const focus = useFocus()
+  const focus = useFocusControls()
   const { workspace } = useWorkspace()
   const busy = focus.status === 'running' || focus.status === 'paused'
   const tasks = workspace.tasks.filter((task) => !task.completed && workspace.goals.some((goal) => goal.id === task.goalId && !goal.archived))

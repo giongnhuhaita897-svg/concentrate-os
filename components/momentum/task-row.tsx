@@ -5,14 +5,14 @@ import { Play, Clock3 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { useWorkspace } from '@/hooks/use-workspace'
-import { useFocus } from '@/hooks/use-focus'
+import { useFocusControls } from '@/hooks/use-focus'
 import { cn } from '@/lib/utils'
 import type { Task } from '@/lib/momentum/types'
 
 export function TaskRow({ task, compact = false }: { task: Task; compact?: boolean }) {
   const { workspace, toggleTask } = useWorkspace()
   const goal = workspace.goals.find((item) => item.id === task.goalId)
-  const focus = useFocus()
+  const focus = useFocusControls()
   const router = useRouter()
   return <div className={cn('task-row', compact && 'is-compact', task.completed && 'is-complete')}>
     <Checkbox checked={task.completed} onCheckedChange={() => void toggleTask(task.id)} aria-label={`Hoàn thành: ${task.title}`} />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Info, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useWorkspace } from '@/hooks/use-workspace'
@@ -19,7 +19,7 @@ export function PlannerPage() {
   const [selected, setSelected] = useState(workspace.today)
   const [weekStart, setWeekStart] = useState(() => startOfWeek(workspace.today))
   const [editor, setEditor] = useState<{ entry?: ScheduleEntry } | null>(null)
-  const days = weekDates(weekStart).map((date) => dayBudget(workspace, date))
+  const days = useMemo(() => weekDates(weekStart).map((date) => dayBudget(workspace, date)), [workspace, weekStart])
   const budget = days.find((day) => day.date === selected) ?? dayBudget(workspace, selected)
 
   function changeWeek(offset: number) {
