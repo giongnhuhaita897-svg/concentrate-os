@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ExerciseTrainer } from "@/components/exercise/exercise-trainer";
-
+   import { CameraGuide } from "@/components/exercise/camera-guide";
 export const metadata: Metadata = {
   title: "Vận động",
 };
@@ -19,6 +19,7 @@ export default function ExercisePage() {
       </header>
 
       <ExerciseTrainer />
+         <CameraGuide />
     </div>
   );
 }
