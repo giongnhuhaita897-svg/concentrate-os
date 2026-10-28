@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowUpRight, AudioLines, CalendarDays, ChartNoAxesColumnIncreasing, ChevronRight, CircleHelp, Command, Focus, LayoutGrid, Menu, Search, Settings2, Sparkles, Target, X } from 'lucide-react'
+import { ArrowUpRight, AudioLines, CalendarDays, ChartNoAxesColumnIncreasing, ChevronRight, CircleHelp, Command, Dumbell, Focus, LayoutGrid, Menu, Search, Settings2, Sparkles, Target, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { useWorkspace } from '@/hooks/use-workspace'
@@ -17,6 +17,7 @@ const navigation = [
   { href: '/goals', label: 'Mục tiêu', icon: Target },
   { href: '/planner', label: 'Lên kế hoạch', icon: CalendarDays },
   { href: '/focus', label: 'Phòng tập trung', icon: Focus },
+  { href: '/exercise', label: 'Bài tập', icon: Dumbbell },
   { href: '/insights', label: 'Thống kê', icon: ChartNoAxesColumnIncreasing },
 ]
 
