@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowUpRight, AudioLines, CalendarDays, ChartNoAxesColumnIncreasing, ChevronRight, CircleHelp, Command, Dumbell, Focus, LayoutGrid, Menu, Search, Settings2, Sparkles, Target, X } from 'lucide-react'
+import { ArrowUpRight, AudioLines, CalendarDays, ChartNoAxesColumnIncreasing, ChevronRight, CircleHelp, Command, Dumbbell, Focus, LayoutGrid, Menu, Search, Settings2, Sparkles, Target, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { useWorkspace } from '@/hooks/use-workspace'
