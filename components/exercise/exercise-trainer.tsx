@@ -11,6 +11,7 @@ import {
   type CategoryId,
   type Stage,
 } from "@/lib/exercise-engine";
+import { saveExerciseSet } from "./exercise-history";
 
 /* Bản wasm phải trùng phiên bản với gói đã cài: pnpm add @mediapipe/tasks-vision@1.1.1 */
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm";
@@ -61,6 +62,7 @@ export function ExerciseTrainer() {
   const [exerciseId, setExerciseId] = useState<string>(CATEGORIES[0].exercises[0].id);
   const selectionRef = useRef({ categoryId: CATEGORIES[0].id, exerciseId: CATEGORIES[0].exercises[0].id });
   const counterRef = useRef<{ count: number; stage: Stage }>({ count: 0, stage: null });
+  const savedCountRef = useRef(0);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -71,15 +73,30 @@ export function ExerciseTrainer() {
   const exercise = category.exercises.find((e) => e.id === exerciseId) ?? category.exercises[0];
   const running = phase === "running";
 
+  /* ---------------- ghi lịch sử tập luyện ---------------- */
+
+  const flushSet = useCallback(() => {
+    const count = counterRef.current.count;
+    if (count <= 0 || count === savedCountRef.current) return;
+    const { categoryId: c, exerciseId: e } = selectionRef.current;
+    const cat = CATEGORIES.find((x) => x.id === c);
+    const ex = cat?.exercises.find((x) => x.id === e);
+    if (!cat || !ex) return;
+    savedCountRef.current = count;
+    saveExerciseSet({ category: cat.name, exercise: ex.name, count });
+  }, []);
+
   /* ---------------- chọn danh mục, bài tập ---------------- */
 
   const choose = useCallback((cat: CategoryId, ex: string) => {
+    flushSet();
     selectionRef.current = { categoryId: cat, exerciseId: ex };
     counterRef.current = { count: 0, stage: null };
+    savedCountRef.current = 0;
     setCategoryId(cat);
     setExerciseId(ex);
     setDisplay((d) => ({ ...d, count: 0, stage: null, angle: 0 }));
-  }, []);
+  }, [flushSet]);
 
   const chooseCategory = useCallback(
     (cat: CategoryId) => {
@@ -102,9 +119,11 @@ export function ExerciseTrainer() {
   }, [chooseCategory]);
 
   const resetCounter = useCallback(() => {
+    flushSet();
     counterRef.current = { count: 0, stage: null };
+    savedCountRef.current = 0;
     setDisplay((d) => ({ ...d, count: 0, stage: null, angle: 0 }));
-  }, []);
+  }, [flushSet]);
 
   /* ---------------- vòng lặp nhận diện ---------------- */
 
@@ -232,6 +251,7 @@ export function ExerciseTrainer() {
 
       if (!mountedRef.current) return;
       counterRef.current = { count: 0, stage: null };
+      savedCountRef.current = 0;
       setDisplay(EMPTY_DISPLAY);
       setPhase("running");
 
@@ -251,25 +271,29 @@ export function ExerciseTrainer() {
 
   const toggleCamera = useCallback(() => {
     if (phase === "running") {
+      flushSet();
       stop();
       setPhase("idle");
     } else {
       void start();
     }
-  }, [phase, start, stop]);
+  }, [phase, start, stop, flushSet]);
 
   /* ---------------- dọn dẹp khi rời trang ---------------- */
 
   useEffect(() => {
     mountedRef.current = true;
+    window.addEventListener("pagehide", flushSet);
     return () => {
+      window.removeEventListener("pagehide", flushSet);
       mountedRef.current = false;
+      flushSet();
       stop();
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
       drawingRef.current = null;
     };
-  }, [stop]);
+  }, [stop, flushSet]);
 
   /* ---------------- phím tắt giống bản Python ---------------- */
 
