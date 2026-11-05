@@ -5,13 +5,12 @@ import { Camera, CameraOff, RotateCcw } from "lucide-react";
 import type { DrawingUtils, PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
   CATEGORIES,
-  countRep,
+  ExerciseRepTracker,
   jointsFromLandmarks,
   stageLabel,
   type CategoryId,
   type Stage,
 } from "@/lib/exercise-engine";
-import { saveExerciseSet } from "./exercise-history";
 
 /* Bản wasm phải trùng phiên bản với gói đã cài: pnpm add @mediapipe/tasks-vision@1.1.1 */
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm";
@@ -57,13 +56,13 @@ export function ExerciseTrainer() {
   const lastVideoTimeRef = useRef(-1);
   const lastPushRef = useRef(0);
   const mountedRef = useRef(true);
+  const startLockRef = useRef(false);
 
   const [categoryId, setCategoryId] = useState<CategoryId>(CATEGORIES[0].id);
   const [exerciseId, setExerciseId] = useState<string>(CATEGORIES[0].exercises[0].id);
   const selectionRef = useRef({ categoryId: CATEGORIES[0].id, exerciseId: CATEGORIES[0].exercises[0].id });
   const counterRef = useRef<{ count: number; stage: Stage }>({ count: 0, stage: null });
-  const savedCountRef = useRef(0);
-
+const trackerRef = useRef(new ExerciseRepTracker());
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [videoSize, setVideoSize] = useState({ w: 16, h: 9 });
@@ -73,30 +72,15 @@ export function ExerciseTrainer() {
   const exercise = category.exercises.find((e) => e.id === exerciseId) ?? category.exercises[0];
   const running = phase === "running";
 
-  /* ---------------- ghi lịch sử tập luyện ---------------- */
-
-  const flushSet = useCallback(() => {
-    const count = counterRef.current.count;
-    if (count <= 0 || count === savedCountRef.current) return;
-    const { categoryId: c, exerciseId: e } = selectionRef.current;
-    const cat = CATEGORIES.find((x) => x.id === c);
-    const ex = cat?.exercises.find((x) => x.id === e);
-    if (!cat || !ex) return;
-    savedCountRef.current = count;
-    saveExerciseSet({ category: cat.name, exercise: ex.name, count });
-  }, []);
-
   /* ---------------- chọn danh mục, bài tập ---------------- */
 
   const choose = useCallback((cat: CategoryId, ex: string) => {
-    flushSet();
     selectionRef.current = { categoryId: cat, exerciseId: ex };
     counterRef.current = { count: 0, stage: null };
-    savedCountRef.current = 0;
     setCategoryId(cat);
     setExerciseId(ex);
     setDisplay((d) => ({ ...d, count: 0, stage: null, angle: 0 }));
-  }, [flushSet]);
+  }, []);
 
   const chooseCategory = useCallback(
     (cat: CategoryId) => {
@@ -119,11 +103,10 @@ export function ExerciseTrainer() {
   }, [chooseCategory]);
 
   const resetCounter = useCallback(() => {
-    flushSet();
     counterRef.current = { count: 0, stage: null };
-    savedCountRef.current = 0;
+    trackerRef.current.reset();
     setDisplay((d) => ({ ...d, count: 0, stage: null, angle: 0 }));
-  }, [flushSet]);
+  }, []);
 
   /* ---------------- vòng lặp nhận diện ---------------- */
 
@@ -152,14 +135,17 @@ export function ExerciseTrainer() {
     if (landmarks) {
       try {
         const { categoryId: cat, exerciseId: ex } = selectionRef.current;
-        const r = countRep(
-          cat,
-          ex,
-          counterRef.current.stage,
-          counterRef.current.count,
-          jointsFromLandmarks(landmarks),
-        );
-        counterRef.current = { count: r.counter, stage: r.stage };
+        
+const r = trackerRef.current.update(
+  cat,
+  ex,
+  jointsFromLandmarks(landmarks),
+  performance.now(),
+);
+        counterRef.current = { 
+          count: r.counter, 
+          stage: r.stage, 
+        };
         angle = r.angle;
         feedback = r.feedback;
       } catch {
@@ -173,8 +159,10 @@ export function ExerciseTrainer() {
         drawing.drawLandmarks(landmarks, { color: JOINT_COLOR, fillColor: JOINT_COLOR, radius: 3 });
       }
     }
-
-    /* Cập nhật giao diện tối đa ~12 lần/giây để không giật. */
+     else {
+      trackerRef.current.missing(performance.now());
+    }
+ /* Cập nhật giao diện tối đa ~12 lần/giây để không giật. */
     const now = performance.now();
     if (now - lastPushRef.current > 80) {
       lastPushRef.current = now;
@@ -200,12 +188,15 @@ export function ExerciseTrainer() {
   }, []);
 
   const start = useCallback(async () => {
-    if (phase === "starting" || phase === "running") return;
+    // Ref khóa đồng bộ ngay lập tức, tránh nhiều lần click trước khi React render.
+    if (startLockRef.current || phase === "starting" || phase === "running") return;
+    startLockRef.current = true;
     setError(null);
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera chỉ hoạt động trên https hoặc localhost. Hãy mở trang bằng http://localhost:3000.");
       setPhase("error");
+      startLockRef.current = false;
       return;
     }
 
@@ -217,15 +208,32 @@ export function ExerciseTrainer() {
       });
       streamRef.current = stream;
 
+      // Người dùng có thể rời trang trong lúc trình duyệt đang hỏi quyền camera.
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        return;
+      }
+
       const video = videoRef.current;
       if (!video) throw new Error("Không tìm thấy khung video");
       video.srcObject = stream;
       await video.play();
+
+      if (!mountedRef.current) {
+        stop();
+        return;
+      }
       setVideoSize({ w: video.videoWidth || 16, h: video.videoHeight || 9 });
 
       if (!landmarkerRef.current) {
         const { FilesetResolver, PoseLandmarker, DrawingUtils } = await import("@mediapipe/tasks-vision");
         const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
+        if (!mountedRef.current) {
+          stop();
+          return;
+        }
+
         const options = {
           runningMode: "VIDEO" as const,
           numPoses: 1,
@@ -244,14 +252,25 @@ export function ExerciseTrainer() {
             baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
           });
         }
+
+        // Nếu component bị tháo trong lúc mô hình đang tải, đóng mô hình vừa tạo.
+        if (!mountedRef.current) {
+          landmarkerRef.current.close();
+          landmarkerRef.current = null;
+          stop();
+          return;
+        }
+
         connectionsRef.current = PoseLandmarker.POSE_CONNECTIONS;
         const ctx = canvasRef.current?.getContext("2d");
         if (ctx) drawingRef.current = new DrawingUtils(ctx);
       }
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        stop();
+        return;
+      }
       counterRef.current = { count: 0, stage: null };
-      savedCountRef.current = 0;
       setDisplay(EMPTY_DISPLAY);
       setPhase("running");
 
@@ -266,34 +285,32 @@ export function ExerciseTrainer() {
         setError(describeError(e));
         setPhase("error");
       }
+    } finally {
+      startLockRef.current = false;
     }
   }, [phase, processFrame, stop]);
 
   const toggleCamera = useCallback(() => {
     if (phase === "running") {
-      flushSet();
       stop();
       setPhase("idle");
     } else {
       void start();
     }
-  }, [phase, start, stop, flushSet]);
+  }, [phase, start, stop]);
 
   /* ---------------- dọn dẹp khi rời trang ---------------- */
 
   useEffect(() => {
     mountedRef.current = true;
-    window.addEventListener("pagehide", flushSet);
     return () => {
-      window.removeEventListener("pagehide", flushSet);
       mountedRef.current = false;
-      flushSet();
       stop();
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
       drawingRef.current = null;
     };
-  }, [stop, flushSet]);
+  }, [stop]);
 
   /* ---------------- phím tắt giống bản Python ---------------- */
 
