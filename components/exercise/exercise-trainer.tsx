@@ -5,7 +5,7 @@ import { Camera, CameraOff, RotateCcw } from "lucide-react";
 import type { DrawingUtils, PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
   CATEGORIES,
-  countRep,
+  ExerciseRepTracker,
   jointsFromLandmarks,
   stageLabel,
   type CategoryId,
@@ -62,7 +62,7 @@ export function ExerciseTrainer() {
   const [exerciseId, setExerciseId] = useState<string>(CATEGORIES[0].exercises[0].id);
   const selectionRef = useRef({ categoryId: CATEGORIES[0].id, exerciseId: CATEGORIES[0].exercises[0].id });
   const counterRef = useRef<{ count: number; stage: Stage }>({ count: 0, stage: null });
-
+const trackerRef = useRef(new ExerciseRepTracker());
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [videoSize, setVideoSize] = useState({ w: 16, h: 9 });
@@ -104,6 +104,7 @@ export function ExerciseTrainer() {
 
   const resetCounter = useCallback(() => {
     counterRef.current = { count: 0, stage: null };
+    trackerRef.current.reset();
     setDisplay((d) => ({ ...d, count: 0, stage: null, angle: 0 }));
   }, []);
 
@@ -134,14 +135,17 @@ export function ExerciseTrainer() {
     if (landmarks) {
       try {
         const { categoryId: cat, exerciseId: ex } = selectionRef.current;
-        const r = countRep(
-          cat,
-          ex,
-          counterRef.current.stage,
-          counterRef.current.count,
-          jointsFromLandmarks(landmarks),
-        );
-        counterRef.current = { count: r.counter, stage: r.stage };
+        
+const r = trackerRef.current.update(
+  cat,
+  ex,
+  jointsFromLandmarks(landmarks),
+  performance.now(),
+);
+        counterRef.current = { 
+          count: r.counter, 
+          stage: r.stage, 
+        };
         angle = r.angle;
         feedback = r.feedback;
       } catch {
@@ -155,8 +159,10 @@ export function ExerciseTrainer() {
         drawing.drawLandmarks(landmarks, { color: JOINT_COLOR, fillColor: JOINT_COLOR, radius: 3 });
       }
     }
-
-    /* Cập nhật giao diện tối đa ~12 lần/giây để không giật. */
+     else {
+      trackerRef.current.missing(performance.now());
+    }
+ /* Cập nhật giao diện tối đa ~12 lần/giây để không giật. */
     const now = performance.now();
     if (now - lastPushRef.current > 80) {
       lastPushRef.current = now;
