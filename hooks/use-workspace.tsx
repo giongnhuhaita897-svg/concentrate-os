@@ -1,23 +1,84 @@
 'use client'
 
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import useSWR, { SWRConfig } from 'swr'
 import type { DailyRoutine, FocusSession, Goal, ScheduleEntry, Task, Workspace } from '@/lib/momentum/types'
 import { validateRoutine, validateSchedule } from '@/lib/momentum/planner'
 
 const InitialWorkspaceContext = createContext<Workspace | null>(null)
+const STORAGE_KEY = 'focus-os-workspace-v1'
 
-export function WorkspaceProvider({ initialWorkspace, children }: { initialWorkspace: Workspace; children: ReactNode }) {
+function loadWorkspace(initial: Workspace): Workspace {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+
+    if (!saved) return initial
+
+    const parsed = JSON.parse(saved) as Workspace
+
+    return {
+      ...initial,
+      ...parsed,
+    }
+  } catch {
+    return initial
+  }
+}
+
+
+export function WorkspaceProvider({
+  initialWorkspace,
+  children,
+}: {
+  initialWorkspace: Workspace
+  children: ReactNode
+}) {
   const [cache] = useState(() => new Map())
-  return <SWRConfig value={{ provider: () => cache, revalidateOnFocus: false, revalidateOnReconnect: false }}><InitialWorkspaceContext.Provider value={initialWorkspace}>{children}</InitialWorkspaceContext.Provider></SWRConfig>
+  const [savedWorkspace, setSavedWorkspace] = useState<Workspace | null>(null)
+
+  useEffect(() => {
+    const restored = loadWorkspace(initialWorkspace)
+    cache.set('focus-os-workspace', restored)
+    setSavedWorkspace(restored)
+  }, [cache, initialWorkspace])
+
+  if (savedWorkspace === null) return null
+
+  return (
+    <SWRConfig
+      value={{
+        provider: () => cache,
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+      }}
+    >
+      <InitialWorkspaceContext.Provider value={savedWorkspace}>
+        {children}
+      </InitialWorkspaceContext.Provider>
+    </SWRConfig>
+  )
 }
 
 export function useWorkspace() {
   const initial = useContext(InitialWorkspaceContext)
   if (!initial) throw new Error('WorkspaceProvider is required')
-  const { data, mutate } = useSWR<Workspace>('focus-os-workspace', null, { fallbackData: initial })
+  const { data, mutate } = useSWR<Workspace>('focus-os-workspace', null)
   const workspace = data ?? initial
-  const update = (fn: (current: Workspace) => Workspace) => mutate((current) => fn(current ?? initial), { revalidate: false })
+  const update = (fn: (current: Workspace) => Workspace) =>
+  mutate(
+    (current) => {
+      const updated = fn(current ?? initial)
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      } catch (error) {
+        console.error('Failed to save workspace:', error)
+      }
+
+      return updated
+    },
+    { revalidate: false }
+  )
   return {
     workspace,
     addGoal: (goal: Omit<Goal, 'id' | 'archived'>) => update((current) => ({ ...current, goals: [...current.goals, { ...goal, id: crypto.randomUUID(), archived: false }] })),
